@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistem Pemantauan Ambulans Kab. Temanggung</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Leaflet CSS & JS (Peta) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
+  <!-- FontAwesome (Ikon) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  
+  <!-- PapaParse (Untuk Membaca Google Sheets CSV) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+  <style>
+    #map {
+      height: 100%;
+      width: 100%;
+      z-index: 1;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7); }
+      70% { transform: scale(1.15); box-shadow: 0 0 0 12px rgba(37, 99, 235, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+    }
+    .user-marker-pulse {
+      animation: pulse-ring 2s infinite;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 font-sans text-slate-800 h-screen flex flex-col overflow-hidden">
+
+  <!-- HEADER APLIKASI -->
+  <header class="bg-slate-900 text-white px-4 py-3 shadow-md flex justify-between items-center z-10 shrink-0">
+    <div class="flex items-center space-x-3">
+      <div class="bg-red-600 text-white p-2 rounded-lg flex items-center justify-center shadow">
+        <i class="fa-solid fa-truck-medical text-xl"></i>
+      </div>
+      <div>
+        <h1 class="font-bold text-base md:text-lg leading-tight">SIMBA Kabupaten Temanggung</h1>
+        <p class="text-xs text-slate-400 hidden sm:block">Sistem Informasi & Monitoring Bantuan Ambulans</p>
+      </div>
+    </div>
+    <div class="flex items-center space-x-2">
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+        <span class="w-2 h-2 mr-1.5 bg-emerald-500 rounded-full"></span>
+        Sistem Online
+      </span>
+    </div>
+  </header>
+
+  <!-- KONTEN UTAMA -->
+  <div class="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+    
+    <!-- SIDEBAR PANEL (KIRI) -->
+    <div class="w-full md:w-96 bg-white border-r border-slate-200 flex flex-col z-10 h-1/2 md:h-full shadow-lg">
+      
+      <!-- DROPDOWN, GPS & REFRESH -->
+      <div class="p-4 border-b border-slate-100 bg-slate-50/50 space-y-3">
+        <div class="flex items-center justify-between">
+          <label for="districtSelect" class="block text-xs font-bold text-slate-600 uppercase tracking-wider">
+            <i class="fa-solid fa-location-crosshairs text-red-500 mr-1"></i> Urutkan Sesuai Lokasi
+          </label>
+          <div class="flex items-center space-x-2">
+            <button onclick="document.getElementById('districtSelect').value=''; handleDistrictChange();" title="Reset Pilihan Lokasi" class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-2.5 py-1 rounded-lg transition flex items-center font-medium">
+  <i class="fa-solid fa-rotate-left mr-1.5 text-slate-500"></i> Reset
+</button>
+            <span id="unitCount" class="bg-red-100 text-red-700 text-xs font-semibold px-2 py-0.5 rounded-full">0 Posko</span>
+          </div>
+        </div>
+
+        <!-- TOMBOL LOKASI SAYA (GPS) -->
+        <button id="userLocationBtn" onclick="getUserLocation()" class="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-xs py-2.5 px-3 rounded-lg transition-all flex items-center justify-center space-x-2 shadow-sm">
+          <i class="fa-solid fa-location-arrow text-sm" id="gpsIcon"></i>
+          <span id="gpsBtnText">Gunakan Lokasi Saya (GPS)</span>
+        </button>
+
+        <div class="relative">
+          <select id="districtSelect" onchange="handleDistrictChange()" class="w-full bg-white border border-slate-300 text-slate-800 text-sm rounded-lg focus:ring-red-500 focus:border-red-500 p-2.5 pr-8 appearance-none cursor-pointer shadow-sm">
+            <option value="">-- Tampilkan Seluruh Kab. Temanggung --</option>
+            <option value="Bansari">Kec. Bansari</option>
+            <option value="Bejen">Kec. Bejen</option>
+            <option value="Bulu">Kec. Bulu</option>
+            <option value="Candiroto">Kec. Candiroto</option>
+            <option value="Gemawang">Kec. Gemawang</option>
+            <option value="Jumo">Kec. Jumo</option>
+            <option value="Kaloran">Kec. Kaloran</option>
+            <option value="Kandangan">Kec. Kandangan</option>
+            <option value="Kedu">Kec. Kedu</option>
+            <option value="Kledung">Kec. Kledung</option>
+            <option value="Kranggan">Kec. Kranggan</option>
+            <option value="Ngadirejo">Kec. Ngadirejo</option>
+            <option value="Parakan">Kec. Parakan</option>
+            <option value="Pringsurat">Kec. Pringsurat</option>
+            <option value="Selopampang">Kec. Selopampang</option>
+            <option value="Temanggung">Kec. Temanggung</option>
+            <option value="Tembarak">Kec. Tembarak</option>
+            <option value="Tlogomulyo">Kec. Tlogomulyo</option>
+            <option value="Tretep">Kec. Tretep</option>
+            <option value="Wonoboyo">Kec. Wonoboyo</option>
+          </select>
+          <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-500">
+            <i class="fa-solid fa-chevron-down text-xs"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- DAFTAR UNIT AMBULANCE -->
+      <div id="ambulanceList" class="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+      </div>
+
+      <!-- FOOTER SIDEBAR -->
+      <div class="p-2 border-t border-slate-100 bg-slate-50 flex justify-between items-center text-[11px] text-slate-500">
+        <span id="statusMsg">Memuat data...</span>
+        <span class="text-slate-400">Live Sync</span>
+      </div>
+    </div>
+
+    <!-- PETA (KANAN) -->
+    <div class="flex-1 h-1/2 md:h-full relative">
+      <div id="map"></div>
+    </div>
+
+  </div>
+
+  <script>
+    // URL GOOGLE SHEETS CSV ANDA
+    const GOOGLE_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSMfwvUAXw8uyYBk4T7h02iLzWwVa2uvtbjNurbm1xpfAvPFk0EhiJI2gnEHNZcgPqCRzVjw-wFe6Ur/pub?output=csv"; 
+
+    // KOORDINAT KECAMATAN DI TEMANGGUNG
+    const DISTRICT_COORDS = {
+      "Temanggung": [-7.318899661530362, 110.18399734417689],
+      "Parakan": [-7.280183526165857, 110.09968544417688],
+      "Ngadirejo": [-7.23609327570014, 110.05593395951838],
+      "Kranggan": [-7.340778036693397, 110.21423992883537],
+      "Pringsurat": [-7.3576686662361475, 110.28852721534152],
+      "Kedu": [-7.2780653554601145, 110.1578093],
+      "Bulu": [-7.291179400480024, 110.1315547],
+      "Kandangan": [-7.257633785614256, 110.18517864232923],
+      "Kaloran": [-7.268448562382398, 110.24267837116462],
+      "Jumo": [-7.227985097778742, 110.1107553846585],
+      "Candiroto": [-7.173649761781128, 110.06555404417688],
+      "Bejen": [-7.11869187738371, 110.08450168281084],
+      "Tretep": [-7.1716825906097394, 110.0144281862103],
+      "Wonoboyo": [-7.1997680022305195, 110.02525119392725],
+      "Gemawang": [-7.189241185099109, 110.15332292273617],
+      "Bansari": [-7.284633126009662, 110.05982945728344],
+      "Kledung": [-7.3372387852629934, 110.03485275767073],
+      "Tembarak": [-7.35649828958698, 110.18927357116462],
+      "Tlogomulyo": [-7.334161591528127, 110.15467648281087],
+      "Selopampang": [-7.378792832813594, 110.1729143941461]
+    };
+
+    // DATA AMBULANS (BAWAAN / CADANGAN LOKAL)
+ let ambulanceData = [
+      {
+        Nama: "PSC 119 TEMANGGUNG",
+        Alamat: "Jl. Jend. Sudirman No.181, Dongkelan Selatan, Kertosari, Kec. Temanggung, Kabupaten Temanggung, Jawa Tengah 56217",
+        No_Telepon: "029349690969",
+        No_Whatsapp: "081312189119",
+        Latitude: -7.323615428,
+        Longitude: 110.1928201
+      }
+      ,{
+        Nama: "RSUD KABUPATEN TEMANGGUNG",
+        Alamat: "Jl. Gajah Mada No.1A, Tepungsari, Temanggung I, Kec. Temanggung, Kabupaten Temanggung, Jawa Tengah 56213",
+        No_Telepon: "0293491118",
+        No_Whatsapp: "082227108811",
+        Latitude: -7.309312641855023,  
+        Longitude: 110.17946314627821
+      }
+      ,{
+        Nama: "RSU GUNUNG SAWO",
+        Alamat: "Jl. Gatot Subroto No.KM 2, RT.004/RW.001, Karangsari, Manding, Kec. Temanggung, Kabupaten Temanggung, Jawa Tengah 56224",
+        No_Telepon: "",
+        No_Whatsapp: "089506031205",
+        Latitude: -7.311199861884822, 
+        Longitude: 110.16069321163967
+      }
+      ,{
+        Nama: "RS PKU MUHAMMADIYAH TEMANGGUNG",
+        Alamat: "Jl. Raya Kedu - Parakan No.Km. 02, Sawah, Kalisat, Kec. Bulu, Kabupaten Temanggung, Jawa Tengah 56253",
+        No_Telepon: "",
+        No_Whatsapp: "085117226700",
+        Latitude: -7.27919328778802, 
+        Longitude: 110.11842473647296
+      }   
+      ,{
+        Nama: "RSK NGESTI WALUYO",
+        Alamat: "Jl. Pahlawan, Jubug, Wanutengah, Kec. Parakan, Kabupaten Temanggung, Jawa Tengah 56254",
+        No_Telepon: "",
+        No_Whatsapp: "081225894343",
+        Latitude: -7.286610380198453, 
+        Longitude: 110.10520309229445
+      }
+      ,{
+        Nama: "PUSKESMAS BANJARSARI",
+        Alamat: "Kalibetung, Banjarsari, Kec. Ngadirejo, Kabupaten Temanggung, Jawa Tengah 56255",
+        No_Telepon: "02935922060",
+        No_Whatsapp: "081325343411",
+        Latitude: -7.2653940170072895, 
+        Longitude: 110.05853408119458 
+      }
+      ,{
+        Nama: "PUSKESMAS BANSARI",
+        Alamat: "Kwagean, Mojosari, Kec. Bansari, Kabupaten Temanggung, Jawa Tengah 56265",
+        No_Telepon: "0293596925",
+        No_Whatsapp: "085729818145",
+        Latitude: -7.287765118123393,
+        Longitude: 110.06646289229444
+      }
+      ,{
+        Nama: "PUSKESMAS BEJEN",
+        Alamat: "Jl. Sukorejo - Parakan No.6, Demangan, Bejen, Kec. Bejen, Kabupaten Temanggung, Jawa Tengah 56258",
+        No_Telepon: "02933653020",
+        No_Whatsapp: "08895472075",
+        Latitude: -7.118597439563015, 
+        Longitude: 110.0832957653059
+      }
+      ,{
+        Nama: "PUSKESMAS BULU",
+        Alamat: "Jl. Bulu - Parakan, Wolodono, Bulu, Kec. Bulu, Kabupaten Temanggung, Jawa Tengah 56253",
+        No_Telepon: "02934902255",
+        No_Whatsapp: "081392314705",
+        Latitude: -7.292775246145758, 
+        Longitude: 110.13293716715893 
+      }
+      ,{
+        Nama: "PUSKESMAS CANDIROTO",
+        Alamat: "Jalan, Candiroto, Temanggung Regency, Central Java 56257",
+        No_Telepon: "02935921484",
+        No_Whatsapp: "085866210654",
+        Latitude: -7.174113509890703, 
+        Longitude: 110.06538732297825
+      }
+       ,{
+        Nama: "PUSKESMAS DHARMA RINI",
+        Alamat: "Jl. Pahlawan No.14, Gemoksari, Butuh, Kec. Temanggung, Kabupaten Temanggung, Jawa Tengah 56213",
+        No_Telepon: "02934960021",
+        No_Whatsapp: "08979806999",
+        Latitude: -7.3203239166936775, 
+        Longitude: 110.17754200291132
+      }
+      ,{
+        Nama: "PUSKESMAS GEMAWANG",
+        Alamat: "Gemawang, Temanggung Regency, Central Java 56283",
+        No_Telepon: "08112574619",
+        No_Whatsapp: "085753415028",
+        Latitude: -7.192050059989842,         
+        Longitude: 110.14882353642327
+      }
+      ,{
+        Nama: "PUSKESMAS JUMO",
+        Alamat: "Jl. Jagalan, Jagalan, Jumo, Kec. Jumo, Kabupaten Temanggung, Jawa Tengah 56256",
+        No_Telepon: "082133298633",
+        No_Whatsapp: "081293353623",
+        Latitude: -7.228468726424333, 
+        Longitude: 110.11053723462207
+      }
+       ,{
+        Nama: "PUSKESMAS KALORAN",
+        Alamat: "Mengor, Kaloran, Kec. Kaloran, Kabupaten Temanggung, Jawa Tengah 56282",
+        No_Telepon: "02934909853",
+        No_Whatsapp: "082131620610",
+        Latitude: -7.2728440975004425, 
+        Longitude: 110.24009973647279 
+      }
+      ,{
+        Nama: "PUSKESMAS KANDANGAN",
+        Alamat: "Kandangan, Temanggung Regency, Central Java 56281",
+        No_Telepon: "02934900889",
+        No_Whatsapp: "085743482600",
+        Latitude: -7.25898345018775, 
+        Longitude: 110.18565596345826
+      }
+      ,{
+        Nama: "PUSKESMAS KEDU",
+        Alamat: "Jl. Kelud Raya No.4, Sudagaran, Kedu, Kec. Kedu, Kabupaten Temanggung, Jawa Tengah 56252",
+        No_Telepon: "02934902285",
+        No_Whatsapp: "088985417600",
+        Latitude: -7.278379733137455, 
+        Longitude: 110.15857260948725
+      }
+      ,{
+        Nama: "PUSKESMAS KLEDUNG",
+        Alamat: "Jl. Raya Parakan - Wonosobo No.Km.6, Area Sawah, Reco, Kec. Kledung, Kabupaten Wonosobo, Jawa Tengah 56264",
+        No_Telepon: "02935510766",
+        No_Whatsapp: "085325839969",
+        Latitude: -7.3149012793518, 
+        Longitude: 110.05479072483072
+      }
+      ,{
+        Nama: "PUSKESMAS KRANGGAN",
+        Alamat: "Jalan Kyai Kenal No.257, Kasanan, Kranggan, Kec. Kranggan, Kabupaten Temanggung, Jawa Tengah 56271",
+        No_Telepon: "02934901319",
+        No_Whatsapp: "082313735823",
+        Latitude: -7.343751331195941, 
+        Longitude: 110.21315084996681
+      }
+      ,{
+        Nama: "PUSKESMAS NGADIREJO",
+        Alamat: "Demangan, Ngadirejo, Temanggung Regency, Central Java 56255",
+        No_Telepon: "0293591077",
+        No_Whatsapp: "081328030318",
+        Latitude: -7.237327406042356,
+        Longitude: 110.0613522941436
+      }
+      ,{
+        Nama: "PUSKESMAS PARAKAN",
+        Alamat: "Jl. Kosasih No.154, Besaran, Parakan Kauman, Kec. Parakan, Kabupaten Temanggung, Jawa Tengah 16132",
+        No_Telepon: "0293598249",
+        No_Whatsapp: "089506603105",
+        Latitude: -7.281474877277226, 
+        Longitude: 110.09965330763727
+      }
+      ,{
+        Nama: "PUSKESMAS PARE",
+        Alamat: "Jl. Secang - Temanggung No.Km.3, Pare, Kec. Kranggan, Kabupaten Temanggung, Jawa Tengah 56271",
+        No_Telepon: "02744900651",
+        No_Whatsapp: "085727444891",
+        Latitude: -7.374213689798704, 
+        Longitude:  110.23102509063325 
+      }
+      ,{
+        Nama: "PUSKESMAS PRINGSURAT",
+        Alamat: "Wonokerso, Ngebong, Pingit, Pringsurat, Temanggung Regency, Central Java 56272",
+        No_Telepon: "0298596001",
+        No_Whatsapp: "081213005134",
+        Latitude: -7.3259844914005585, 
+        Longitude: 110.32131565181655
+      }
+      ,{
+        Nama: "PUSKESMAS REJOSARI",
+        Alamat: "Jl. Raya Magelang-Semarang, Krajan 3, Rejosari, Kec. Pringsurat, Kabupaten Temanggung, Jawa Tengah 56272",
+        No_Telepon: "02933195600",
+        No_Whatsapp: "0882006691533",
+        Latitude: -7.344560654107766, 
+        Longitude: 110.31620410763834
+      }
+      ,{
+        Nama: "PUSKESMAS SELOPAMPANG",
+        Alamat: "Dusun IV, Selopampang, Temanggung Regency, Central Java 56262",
+        No_Telepon: "02934902543",
+        No_Whatsapp: "082134797688",
+        Latitude: -7.379974824830902,
+        Longitude:  110.18058267394548
+      }
+      ,{
+        Nama: "PUSKESMAS TEMANGGUNG",
+        Alamat: "Jl. Dr. Wahidin No.1, Gendongan, Temanggung II, Kec. Temanggung, Kabupaten Temanggung, Jawa Tengah 56213",
+        No_Telepon: "0293491845",
+        No_Whatsapp: "081280583134",
+        Latitude: -7.313509753988423, 
+        Longitude: 110.17635256345919
+      }
+      ,{
+        Nama: "PUSKESMAS TEMBARAK",
+        Alamat: "Jl. Durenan No.6, Area Sawah / Kebun, Tembarak, Kec. Tembarak, Kabupaten Temanggung, Jawa Tengah 56261",
+        No_Telepon: "02934903340",
+        No_Whatsapp: "085641969644",
+        Latitude: -7.357118215503422, 
+        Longitude: 110.18939064811705
+      }
+      ,{
+        Nama: "PUSKESMAS TEPUSEN",
+        Alamat: "Jl. Kaloran - Kandangan No.KM. 3, Wonolobo Satu, Tepusen, Kec. Kaloran, Kabupaten Temanggung, Jawa Tengah 56282",
+        No_Telepon: "02934909950",
+        No_Whatsapp: "082221343822",
+        Latitude: -7.25927412183958, 
+        Longitude: 110.21284820948689
+      }
+      ,{
+        Nama: "PUSKESMAS TLOGOMULYO",
+        Alamat: "Jalan Tlogomulyo No. 3 Tlogomulyo, Ponoradan, Tanjungsari, Kec. Tlogomulyo, Kabupaten Temanggung, Jawa Tengah 56263",
+        No_Telepon: "02934901893",
+        No_Whatsapp: "081226932594",
+        Latitude: -7.334239643191253, 
+        Longitude: 110.1541481248311
+      }
+      ,{
+        Nama: "PUSKESMAS TRAJI",
+        Alamat: "Gemblok, Traji, Parakan, Temanggung Regency, Central Java 56254",
+        No_Telepon: "02935914057",
+        No_Whatsapp: "085743417601",
+        Latitude: -7.256661838755535, 
+        Longitude: 110.0807364737824
+      }
+       ,{
+        Nama: "PUSKESMAS TRETEP",
+        Alamat: "Jl desa, Dawuhan, Tretep, Kec. Tretep, Kabupaten Temanggung, Jawa Tengah 56259",
+        No_Telepon: "081228147651",
+        No_Whatsapp: "085336858260",
+        Latitude: -7.172249074679118, 
+        Longitude: 110.01464958249976
+      }
+        ,{
+        Nama: "PUSKESMAS WONOBOYO",
+        Alamat: "Jl. Candiroto - Wonoboyo No.Km. 5, Wonorejo, Kebonsari, Kec. Wonoboyo, Kabupaten Temanggung, Jawa Tengah 56266",
+        No_Telepon: "088983568932",
+        No_Whatsapp: "085866611822",
+        Latitude: -7.200674352658558, 
+        Longitude: 110.02427217695012
+      }
+       ,{
+        Nama: "AMBULANS MERDEKA 1",
+        Alamat: "Jl. Mayjend. Panjaitan No.8, Pacarsari, Temanggung II, Kec. Temanggung, Kabupaten Temanggung, Jawa Tengah 56213",
+        No_Telepon: "",
+        No_Whatsapp: "085875086736",
+        Latitude: -7.316090089593668, 
+        Longitude: 110.17144869414504
+      }
+       ,{
+        Nama: "AMBULANS MERDEKA 2",
+        Alamat: "Jl. Mayjend. Panjaitan No.8, Pacarsari, Temanggung II, Kec. Temanggung, Kabupaten Temanggung, Jawa Tengah 56213",
+        No_Telepon: "",
+        No_Whatsapp: "085804233971",
+        Latitude: -7.316427451781645, 
+        Longitude: 110.17148512167715
+      }
+      ,{
+        Nama: "AMBULANS MASJID AL AMIEN BEJEN",
+        Alamat: "Demangan, Bejen, Kec. Bejen, Kabupaten Temanggung, Jawa Tengah 56258",
+        No_Telepon: "",
+        No_Whatsapp: "088239914226",
+        Latitude: -7.117157591878093, 
+        Longitude: 110.08522159886061
+      }
+      ,{
+        Nama: "AMBULANS PEMDES KATEKAN NGADIREJO",
+        Alamat: "Jl. Lamuk, Bakalan, Katekan, Kec. Ngadirejo, Kabupaten Temanggung, Jawa Tengah 56255",
+        No_Telepon: "",
+        No_Whatsapp: "085226967461",
+        Latitude: -7.269248040972869, 
+        Longitude: 110.03760313517027 
+      }
+       ,{
+        Nama: "AMBULANS KELURAHAN KAUMAN PARAKAN",
+        Alamat: "Jl. Raya Parakan - Wonosobo No.276, Karang Tengah, Parakan Kauman, Kec. Parakan, Kabupaten Temanggung, Jawa Tengah 56254",
+        No_Telepon: "",
+        No_Whatsapp: "08156609617",
+        Latitude: -7.2847115213481715, 
+        Longitude: 110.09268659414448
+      }
+      ,{
+        Nama: "AMBULANS DESA KWARAKAN KALORAN",
+        Alamat: "Baturtugel, Kwarakan, Kec. Kaloran, Kabupaten Temanggung, Jawa Tengah 56282",
+        No_Telepon: "",
+        No_Whatsapp: "085227946417",
+        Latitude: -7.29322331858124, 
+        Longitude: 110.27989891770342
+      }
+      ,{
+        Nama: "AMBULANS DESA DLIMOYO NGADIREJO",
+        Alamat: "Patemon, Dlimoyo, Kec. Ngadirejo, Kabupaten Temanggung, Jawa Tengah 56255",
+        No_Telepon: "",
+        No_Whatsapp: "085729331497",
+        Latitude: -7.243153897508671, 
+        Longitude: 110.04071144307979
+      }
+      ,{
+        Nama: "AMBULANS DESA NGAREN NGADIREJO",
+        Alamat: "Krajan, Ngaren, Kec. Ngadirejo, Kabupaten Temanggung, Jawa Tengah 56255",
+        No_Telepon: "",
+        No_Whatsapp: "087722467650",
+        Latitude: -7.229995653056869, 
+        Longitude: 110.05991576338391 
+      }
+       ,{
+        Nama: "AMBULANS DESA PURBOSARI NGADIREJO",
+        Alamat: "Liangan, Purbosari, Kec. Ngadirejo, Kabupaten Temanggung, Jawa Tengah 56255",
+        No_Telepon: "",
+        No_Whatsapp: "081392714414",
+        Latitude: -7.248686375692019, 
+        Longitude: 110.02914367880093
+      }
+      ,{
+        Nama: "AMBULANS DESA SOBOREJO PRINGSURAT",
+        Alamat: "Krajan, Soborejo, Kec. Pringsurat, Kabupaten Temanggung, Jawa Tengah 56272",
+        No_Telepon: "",
+        No_Whatsapp: "082314137222",
+        Latitude: -7.300831997535959, 
+        Longitude: 110.31600013565945
+      }
+       ,{
+        Nama: "AMBULANS DESA PRINGSURAT",
+        Alamat: "Jl. Raya Magelang-Semarang, Soropadan, Pringsurat, Kec. Pringsurat, Kabupaten Temanggung, Jawa Tengah 56272",
+        No_Telepon: "",
+        No_Whatsapp: "085848920982",
+        Latitude: -7.357883964892953,
+        Longitude:  110.28634576597396
+      }
+      ,{
+        Nama: "AMBULANS CIPTO DESA KLEPU",
+        Alamat: "Klepu, Kec. Kranggan, Kabupaten Temanggung, Jawa Tengah 56271",
+        No_Telepon: "",
+        No_Whatsapp: "085602498418",
+        Latitude: -7.3224078526270855, 
+        Longitude: 110.21664810763785 
+      }
+       ,{
+        Nama: "AMBULANS KELURAHAN TEMANGGUNG II",
+        Alamat: "Jl. Gilingsari No.5, Pacarsari, Manding, Kec. Temanggung, Kabupaten Temanggung, Jawa Tengah 56224",
+        No_Telepon: "",
+        No_Whatsapp: "08221141174",
+        Latitude: -7.315287547186589, 
+        Longitude: 110.1685049115004
+      }
+      ,{
+        Nama: "AMBULANS DESA KETENGSARI CANDIROTO",
+        Alamat: "Limbangan, Kentengsari, Kec. Candiroto, Kabupaten Temanggung, Jawa Tengah 56257",
+        No_Telepon: "",
+        No_Whatsapp: "082134411504",
+        Latitude: -7.2370078122273505, 
+        Longitude: 110.02796758620092 
+      }
+      ,{
+        Nama: "AMBULANS MASJID DARUN NAJAH CANDIROTO",
+        Alamat: "Sawah & Hutan, Candiroto, Kec. Candiroto, Kabupaten Temanggung, Jawa Tengah 56257",
+        No_Telepon: "",
+        No_Whatsapp: "082136275244",
+        Latitude: -7.180927311011469, 
+        Longitude: 110.06518047452592
+      }
+       ,{
+        Nama: "AMBULANS LAZISMU TEMANGGUNG",
+        Alamat: "Suronatan, Temanggung II, Temanggung, Temanggung Regency, Central Java 56213",
+        No_Telepon: "",
+        No_Whatsapp: "085867987400",
+        Latitude: -7.31537800610441, 
+        Longitude: 110.17198409414496
+      }
+      ,{
+        Nama: "AMBULANS LAZISMU PKU 1",
+        Alamat: "Jl. Raya Kedu - Parakan No.Km. 02, Sawah, Kalisat, Kec. Bulu, Kabupaten Temanggung, Jawa Tengah 56253",
+        No_Telepon: "",
+        No_Whatsapp: "082323588347",
+        Latitude: -7.278970, 
+        Longitude: 110.118850
+      }
+       ,{
+        Nama: "AMBULANS LAZISMU PKU 2",
+        Alamat: "Jl. Raya Kedu - Parakan No.Km. 02, Sawah, Kalisat, Kec. Bulu, Kabupaten Temanggung, Jawa Tengah 56253",
+        No_Telepon: "",
+        No_Whatsapp: "085640459259",
+        Latitude:-7.278957, 
+        Longitude: 110.119015
+      }
+      ,{
+        Nama: "AMBULANS DESA TLAHAB KLEDUNG",
+        Alamat: "Tlahab, Tlahap, Kec. Kledung, Kabupaten Temanggung, Jawa Tengah 56264",
+        No_Telepon: "",
+        No_Whatsapp: "08138526617",
+        Latitude:-7.32661602, 
+        Longitude: 110.0458148
+      }
+      ,{
+        Nama: "AMBULANS DESA KLEDUNG",
+        Alamat: "Jl. Campur Salam No.7, Kledung, Kec. Kledung, Kabupaten Temanggung, Jawa Tengah 56264",
+        No_Telepon: "",
+        No_Whatsapp: "088216606202",
+        Latitude:-7.339758126, 
+        Longitude: 110.0343521
+      }
+      ,{
+        Nama: "AMBULANS MWC PARAKAN",
+        Alamat: "Jl. Sundoro No.108, Bebengan, Kertosari, Kec. Temanggung, Kabupaten Temanggung, Jawa Tengah 56217",
+        No_Telepon: "0857686822883",
+        No_Whatsapp: "085869144366",
+        Latitude:-7.283476955, 
+        Longitude: 110.0945739
+      }
+      ,{
+        Nama: "AMBULANS INDOARTHA PARAKAN",
+        Alamat: "Jl. Kosasih No.88, Coyudan Utara, Parakan Kauman, Kec. Parakan, Kabupaten Temanggung, Jawa Tengah 56254",
+        No_Telepon: "",
+        No_Whatsapp: "081291459998",
+        Latitude:-7.281238884, 
+        Longitude: 110.0991943
+      }
+      ,{
+        Nama: "AMBULANS RAT",
+        Alamat: "Jl. Brigjen. Katamso No.226, Suronatan, Temanggung II, Kec. Temanggung, Kabupaten Temanggung, Jawa Tengah 56213",
+        No_Telepon: "",
+        No_Whatsapp: "082310456456",
+        Latitude:-7.314453399, 
+        Longitude: 110.1750474
+      }
+      ,{
+        Nama: "AMBULANS GPK",
+        Alamat: "Jurang 2, Jurang, Temanggung, Temanggung Regency, Central Java 56222",
+        No_Telepon: "",
+        No_Whatsapp: "084877180443",
+        Latitude:-7.300919999, 
+        Longitude: 110.1744043
+      }
+      ,{
+        Nama: "AMBULANS AL NAJ FOUNDATION",
+        Alamat: "Tlogomulyo, Temanggung",
+        No_Telepon: "",
+        No_Whatsapp: "085743795307",
+        Latitude:-7.339022866, 
+        Longitude: 110.121342
+      }
+      ,{
+        Nama: "AMBULANS NU JURANG",
+        Alamat: "Jurang 2, Jurang, Temanggung, Temanggung Regency, Central Java 56222",
+        No_Telepon: "082324488232",
+        No_Whatsapp: "085869144366",
+        Latitude:-7.304322008, 
+        Longitude: 110.170937
+      }
+      ,{
+        Nama: "AMBULANS PMI",
+        Alamat: "Jl. Dr. Wahidin No.8, Temanggung Lor, Temanggung II, Kec. Temanggung, Kabupaten Temanggung, Jawa Tengah 56213",
+        No_Telepon: "",
+        No_Whatsapp: "087770710892",
+        Latitude:-7.313478502, 
+        Longitude: 110.1757519
+      }
+      ,{
+        Nama: "AMBULANS PDIP",
+        Alamat: "Jl. Jenderal Sudirman No.95, Dongkelan Selatan, Jampiroso, Kec. Temanggung, Kabupaten Temanggung, Jawa Tengah 56218",
+        No_Telepon: "",
+        No_Whatsapp: "085876000813",
+        Latitude:-7.322855042, 
+        Longitude: 110.1938552
+      }
+      ,{
+        Nama: "AMBULANS INDOARTHA",
+        Alamat: "Cekelan, Madureso, Temanggung, Temanggung Regency, Central Java 56229",
+        No_Telepon: "",
+        No_Whatsapp: "081291459998",
+        Latitude:-7.330727221, 
+        Longitude: 110.2011713
+      }
+      ,{
+        Nama: "AMBULANS PCNU TEMANGGUNG",
+        Alamat: "Jl. Jenderal Sudirman No.60, Jampirejo Barat, Jampirejo, Kec. Temanggung, Kabupaten Temanggung, Jawa Tengah 56218",
+        No_Telepon: "089649312497",
+        No_Whatsapp: "0895800900700",
+        Latitude:-7.319988806, 
+        Longitude: 110.1860374
+      }
+      ,{
+        Nama: "AMBULANS SR TEMANGGUNG",
+        Alamat: "Selopampang, Temanggung",
+        No_Telepon: "",
+        No_Whatsapp: "085282733336",
+        Latitude:-7.380764993, 
+        Longitude: 110.212158
+      }
+      ,{
+        Nama: "AMBULANS NU GEMAWANG",
+        Alamat: "Gemawang, Temanggung Regency, Central Java 56283",
+        No_Telepon: "083137870238",
+        No_Whatsapp: "085292023644",
+        Latitude:-7.194239539, 
+        Longitude: 110.1540529
+      }
+      ,{
+        Nama: "AMBULANS DESA BAKAL CAMPUREJO",
+        Alamat: "Bakal, Campurejo, Kec. Tretep, Kabupaten Temanggung, Jawa Tengah 56259",
+        No_Telepon: "",
+        No_Whatsapp: "085803401500",
+        Latitude:-7.195985384, 
+        Longitude: 109.9933076
+      }
+      ,{
+        Nama: "AMBULANS NU TRETEP 1",
+        Alamat: "Tretep, Temanggung",
+        No_Telepon: "",
+        No_Whatsapp: "08950400089",
+        Latitude:-7.195754763, 
+        Longitude: 109.9962592
+      }
+      ,{
+        Nama: "AMBULANS NU TRETEP 2",
+        Alamat: "Tretep, Temanggung",
+        No_Telepon: "",
+        No_Whatsapp: "083816436460",
+        Latitude:-7.197451818, 
+        Longitude: 109.9888212
+      }
+      ,{
+        Nama: "AMBULANS NU TRETEP 3",
+        Alamat: "Tretep, Temanggung",
+        No_Telepon: "",
+        No_Whatsapp: "085803401500",
+        Latitude:-7.179622042, 
+        Longitude: 109.9883697
+      }
+      ,{
+        Nama: "AMBULANS DESA BOJONG",
+        Alamat: "Gandikan, Bojong, Kec. Tretep, Kabupaten Temanggung, Jawa Tengah 56259",
+        No_Telepon: "",
+        No_Whatsapp: "085713170039",
+        Latitude:-7.191529129, 
+        Longitude: 110.0075983
+      }
+      ,{
+        Nama: "AMBULANS DESA BUNTU",
+        Alamat: "Buntu, Tempelsari, Tretep, Temanggung",
+        No_Telepon: "",
+        No_Whatsapp: "085641604446",
+        Latitude:-7.199228764, 
+        Longitude: 109.9866338
+      }
+      ,{
+        Nama: "AMBULANS DESA TRETEP",
+        Alamat: "Tretep I, Tretep, Kec. Tretep, Kabupaten Temanggung, Jawa Tengah 56259",
+        No_Telepon: "",
+        No_Whatsapp: "083816436460",
+        Latitude:-7.172516034, 
+        Longitude: 110.0108239
+      }
+      ,{
+        Nama: "AMBULANS DESA SIMPAR",
+        Alamat: "Jalan Nomor, Simpar, Tretep, Temanggung Regency, Central Java 56259",
+        No_Telepon: "",
+        No_Whatsapp: "085727555316",
+        Latitude:-7.153242416, 
+        Longitude: 110.0251909
+      }
+      ,{
+        Nama: "AMBULANS DESA DONOROJO",
+        Alamat: "Sawah&Ladang, Donorojo, Kec. Tretep, Kabupaten Temanggung, Jawa Tengah 56259",
+        No_Telepon: "",
+        No_Whatsapp: "083122522017",
+        Latitude:-7.165526957, 
+        Longitude: 109.998251
+      }
+      ,{
+        Nama: "AMBULANS DESA NGLARANGAN",
+        Alamat: "Nglarangan, Kec. Tretep, Kabupaten Temanggung, Jawa Tengah 56259",
+        No_Telepon: "",
+        No_Whatsapp: "087789662258",
+        Latitude:-7.17408951, 
+        Longitude: 109.9861036
+      }
+      ,{
+        Nama: "AMBULANS NU BEJEN",
+        Alamat: "Bejen, Temanggung",
+        No_Telepon: "088802410165",
+        No_Whatsapp: "085641011255",
+        Latitude:-7.115677447, 
+        Longitude: 110.0850273
+      }
+      ,{
+        Nama: "AMBULANS DESA PLOSO",
+        Alamat: "Ploso, Gesing, Kandangan, Temanggung",
+        No_Telepon: "",
+        No_Whatsapp: "085838957846",
+        Latitude:-7.250379305, 
+        Longitude: 110.1827959
+      }
+      ,{
+        Nama: "AMBULANS GPK KALORAN",
+        Alamat: "Kauman, Kaloran, Kec. Kaloran, Kabupaten Temanggung, Jawa Tengah 56282",
+        No_Telepon: "",
+        No_Whatsapp: "085291875515",
+        Latitude:-7.268028096, 
+        Longitude: 110.240539
+      }
+      ,{
+        Nama: "AMBULANS MASJID BENGKAL",
+        Alamat: "Bengkal Lor, Bengkal, Kranggan, Temanggung Regency, Central Java 56195",
+        No_Telepon: "",
+        No_Whatsapp: "081215542504",
+        Latitude:-7.376762904, 
+        Longitude: 110.2220933
+      }
+      ,{
+        Nama: "AMBULANS NU PARE",
+        Alamat: "Pare, Temanggung",
+        No_Telepon: "",
+        No_Whatsapp: "082322277404",
+        Latitude:-7.381250810362044,  
+        Longitude: 110.232703205216548
+      }
+      ,{
+        Nama: "AMBULANS NU PRINGSURAT 2",
+        Alamat: "Pringsurat, Temanggung",
+        No_Telepon: "085222500541",
+        No_Whatsapp: "088950307271",
+        Latitude:-7.361765307, 
+        Longitude: 110.274019
+      }
+      ,{
+        Nama: "AMBULANS NU PRINGSURAT 1",
+        Alamat: "Pringsurat, Temanggung",
+        No_Telepon: "",
+        No_Whatsapp: "08865531083",
+        Latitude:-7.351849216, 
+        Longitude: 110.2824828
+      }
+      ,{
+        Nama: "AMBULANS DESA KLEPU",
+        Alamat: "Klepu, Kec. Kranggan, Kabupaten Temanggung, Jawa Tengah 56271",
+        No_Telepon: "",
+        No_Whatsapp: "085602498418",
+        Latitude:-7.322524907, 
+        Longitude: 110.2166481
+      }
+      ,{
+        Nama: "AMBULANS DESA GOWAK",
+        Alamat: "Krajan 1, Gowak, Kec. Pringsurat, Kabupaten Temanggung, Jawa Tengah 56272",
+        No_Telepon: "",
+        No_Whatsapp: "085729050931",
+        Latitude:-7.337995987, 
+        Longitude: 110.2950659
+      }
+      ,{
+        Nama: "AMBULANS NU PRINGSURAT 3",
+        Alamat: "Pringsurat, Temanggung",
+        No_Telepon: "",
+        No_Whatsapp: "0857291457081",
+        Latitude:-7.296661247, 
+        Longitude: 110.2875973
+      }
+      ,{
+        Nama: "AMBULANS DESA GETAS KALORAN",
+        Alamat: "Getas, Kaloran, Temanggung",
+        No_Telepon: "",
+        No_Whatsapp: "083104735452",
+        Latitude:-7.279373695153628, 
+        Longitude: 110.26188682883573
+      }
+    ];
+
+    let map;
+    let markersGroup;
+    let referenceMarker = null;
+    let userMarker = null;
+    let userLocation = null;
+    let currentDistances = {};
+
+    const ESRI_TILE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
+    const ESRI_ATTRIBUTION = 'Tiles &copy; Esri &mdash; Source: Esri, USGS, NOAA';
+
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371; 
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c; 
+    }
+
+    function initMap() {
+      map = L.map('map', { zoomControl: true }).setView([-7.323615428, 110.1928201], 13);
+      L.tileLayer(ESRI_TILE_URL, { maxZoom: 19, attribution: ESRI_ATTRIBUTION }).addTo(map);
+      markersGroup = L.layerGroup().addTo(map);
+
+      renderMapAndList();
+
+      setTimeout(() => { map.invalidateSize(); }, 500);
+    }
+
+    function createRedAmbulanceIcon() {
+      return L.divIcon({
+        className: 'custom-icon',
+        html: `<div style="background-color: #ef4444; width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.3);"><i class="fa-solid fa-truck-medical text-sm"></i></div>`,
+        iconSize: [38, 38], iconAnchor: [19, 19], popupAnchor: [0, -20]
+      });
+    }
+
+    function createReferenceIcon() {
+      return L.divIcon({
+        className: 'ref-icon',
+        html: `<div style="background-color: #2563eb; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; border: 3px solid white; box-shadow: 0 0 12px rgba(37,99,235,0.8);"><i class="fa-solid fa-location-dot text-xs"></i></div>`,
+        iconSize: [24, 24], iconAnchor: [12, 12]
+      });
+    }
+
+    function createUserLocationIcon() {
+      return L.divIcon({
+        className: 'user-icon',
+        html: `<div class="user-marker-pulse" style="background-color: #2563eb; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; border: 3px solid white; box-shadow: 0 0 15px rgba(37,99,235,0.9);"><i class="fa-solid fa-user text-xs"></i></div>`,
+        iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14]
+      });
+    }
+
+    // FUNGSI DETEKSI LOKASI SAYA (GPS)
+    function getUserLocation() {
+      const gpsIcon = document.getElementById('gpsIcon');
+      const gpsBtnText = document.getElementById('gpsBtnText');
+      const statusMsg = document.getElementById('statusMsg');
+
+      if (!navigator.geolocation) {
+        alert("Perangkat atau browser Anda tidak mendukung fitur lokasi GPS.");
+        return;
+      }
+
+      gpsIcon.className = "fa-solid fa-spinner fa-spin text-sm";
+      gpsBtnText.innerText = "Mendeteksi Lokasi...";
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          gpsIcon.className = "fa-solid fa-location-arrow text-sm";
+          gpsBtnText.innerText = "Lokasi Saya Terdeteksi";
+          
+          const userLat = position.coords.latitude;
+          const userLng = position.coords.longitude;
+          userLocation = { lat: userLat, lng: userLng };
+
+          // Reset dropdown kecamatan
+          document.getElementById('districtSelect').value = "";
+
+          // Hapus marker kecamatan jika ada
+          if (referenceMarker) {
+            map.removeLayer(referenceMarker);
+            referenceMarker = null;
+          }
+
+          // Pasang/update marker lokasi pengguna
+          if (userMarker) map.removeLayer(userMarker);
+          userMarker = L.marker([userLat, userLng], { icon: createUserLocationIcon() }).addTo(map);
+          userMarker.bindPopup("<b>📍 Lokasi Anda Saat Ini</b>").openPopup();
+
+          map.flyTo([userLat, userLng], 14, { duration: 1.2 });
+
+          renderMapAndList();
+
+          if (statusMsg) {
+            statusMsg.innerText = "📍 Posko diurutkan dari lokasi GPS Anda.";
+          }
+        },
+        (error) => {
+          gpsIcon.className = "fa-solid fa-location-arrow text-sm";
+          gpsBtnText.innerText = "Gunakan Lokasi Saya (GPS)";
+          
+          let errMsg = "Gagal mengambil lokasi GPS Anda.";
+          if (error.code === error.PERMISSION_DENIED) {
+            errMsg = "Izin lokasi ditolak. Silakan izinkan akses lokasi GPS di peramban Anda.";
+          }
+          alert(errMsg);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+
+    function renderMapAndList(selectedDistrict = "") {
+      markersGroup.clearLayers();
+      const listContainer = document.getElementById('ambulanceList');
+      listContainer.innerHTML = '';
+
+      let refLat = null;
+      let refLng = null;
+      let isUserLocMode = false;
+
+      if (selectedDistrict && DISTRICT_COORDS[selectedDistrict]) {
+        [refLat, refLng] = DISTRICT_COORDS[selectedDistrict];
+
+        if (referenceMarker) map.removeLayer(referenceMarker);
+        referenceMarker = L.marker([refLat, refLng], { icon: createReferenceIcon() }).addTo(map);
+        referenceMarker.bindPopup(`<b>Pusat Acuan:</b> Kec. ${selectedDistrict}`).openPopup();
+
+        ambulanceData.forEach((item, index) => {
+          const lat = parseFloat(item.Latitude);
+          const lng = parseFloat(item.Longitude);
+          if (!isNaN(lat) && !isNaN(lng)) {
+            currentDistances[index] = calculateDistance(refLat, refLng, lat, lng);
+          } else {
+            currentDistances[index] = 9999;
+          }
+        });
+      } else if (userLocation) {
+        isUserLocMode = true;
+        refLat = userLocation.lat;
+        refLng = userLocation.lng;
+
+        if (referenceMarker) {
+          map.removeLayer(referenceMarker);
+          referenceMarker = null;
+        }
+
+        ambulanceData.forEach((item, index) => {
+          const lat = parseFloat(item.Latitude);
+          const lng = parseFloat(item.Longitude);
+          if (!isNaN(lat) && !isNaN(lng)) {
+            currentDistances[index] = calculateDistance(refLat, refLng, lat, lng);
+          } else {
+            currentDistances[index] = 9999;
+          }
+        });
+      } else {
+        if (referenceMarker) {
+          map.removeLayer(referenceMarker);
+          referenceMarker = null;
+        }
+        currentDistances = {};
+      }
+
+      let itemsToRender = ambulanceData.map((item, originalIndex) => ({
+        ...item,
+        originalIndex,
+        distance: currentDistances[originalIndex] !== undefined ? currentDistances[originalIndex] : null
+      }));
+
+      if (selectedDistrict || isUserLocMode) {
+        itemsToRender.sort((a, b) => a.distance - b.distance);
+      }
+
+      document.getElementById('unitCount').innerText = `${itemsToRender.length} Posko`;
+
+      itemsToRender.forEach((item) => {
+        const lat = parseFloat(item.Latitude);
+        const lng = parseFloat(item.Longitude);
+
+        if (isNaN(lat) || isNaN(lng)) return;
+
+        let rawTel = item.No_Telepon ? item.No_Telepon.toString().replace(/[^0-9]/g, '') : '';
+        if (rawTel && !rawTel.startsWith('0') && !rawTel.startsWith('62')) {
+          rawTel = '0' + rawTel;
+        }
+
+        let rawWa = item.No_Whatsapp ? item.No_Whatsapp.toString().replace(/[^0-9]/g, '') : '';
+        let waFormatted = '';
+        if (rawWa) {
+          waFormatted = rawWa.startsWith('0') ? '62' + rawWa.substring(1) : (rawWa.startsWith('62') ? rawWa : '62' + rawWa);
+        }
+
+        const marker = L.marker([lat, lng], { icon: createRedAmbulanceIcon() });
+        const distLabel = isUserLocMode ? 'dari lokasi Anda' : 'dari pusat kec.';
+        
+        const popupContent = `
+          <div class="p-1 min-w-[200px]">
+            <h3 class="font-bold text-slate-800 text-sm mb-1">${item.Nama || '-'}</h3>
+            <p class="text-xs text-slate-600 mb-2 leading-relaxed"><i class="fa-solid fa-location-dot text-red-500 mr-1"></i>${item.Alamat || '-'}</p>
+            ${item.distance !== null ? `<span class="inline-block bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded mb-2">📍 ${item.distance.toFixed(1)} km${distLabel}</span>` : ''}
+            <div class="flex space-x-1 pt-1 border-t border-slate-100 mt-2">
+              ${rawTel ? `<a href="tel:${rawTel}" class="flex-1 bg-slate-800 text-white text-center py-1.5 rounded text-xs font-medium hover:bg-slate-700"><i class="fa-solid fa-phone mr-1"></i> Telepon</a>` : ''}
+              ${waFormatted ? `<a href="https://wa.me/${waFormatted}" target="_blank" class="flex-1 bg-emerald-600 text-white text-center py-1.5 rounded text-xs font-medium hover:bg-emerald-500"><i class="fa-brands fa-whatsapp mr-1"></i> WA</a>` : ''}
+            </div>
+          </div>
+        `;
+
+        marker.bindPopup(popupContent);
+        markersGroup.addLayer(marker);
+
+        const card = document.createElement('div');
+        card.className = "bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer";
+        card.innerHTML = `
+          <div class="flex justify-between items-start mb-1">
+            <h4 class="font-bold text-slate-800 text-sm leading-snug">${item.Nama || '-'}</h4>
+            ${item.distance !== null ? `<span class="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ml-2">📍 ${item.distance.toFixed(1)} km</span>` : ''}
+          </div>
+          <p class="text-xs text-slate-500 mb-2 line-clamp-2"><i class="fa-solid fa-location-dot text-red-500 mr-1"></i>${item.Alamat || '-'}</p>
+          
+          <div class="text-xs text-slate-600 space-y-1 mb-3 bg-slate-50 p-2 rounded-lg">
+            ${rawTel ? `<div class="flex items-center"><i class="fa-solid fa-phone text-slate-400 w-4"></i><span class="font-mono text-slate-700">${rawTel}</span></div>` : ''}
+            ${rawWa ? `<div class="flex items-center"><i class="fa-brands fa-whatsapp text-emerald-500 w-4"></i><span class="font-mono text-slate-700">${rawWa.startsWith('0') ? rawWa : '0' + rawWa}</span></div>` : ''}
+          </div>
+
+          <div class="flex items-center justify-between pt-1 border-t border-slate-100">
+            <button onclick="focusOnMap(${lat}, ${lng}, '${item.Nama}')" class="text-xs text-red-600 hover:text-red-700 font-medium flex items-center">
+              <i class="fa-solid fa-crosshairs mr-1"></i> Fokus Peta
+            </button>
+            <div class="flex space-x-1">
+              ${rawTel ? `<a href="tel:${rawTel}" class="w-8 h-8 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-800 hover:text-white flex items-center justify-center transition" title="Telepon"><i class="fa-solid fa-phone text-xs"></i></a>` : ''}
+              ${waFormatted ? `<a href="https://wa.me/${waFormatted}" target="_blank" class="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition" title="WhatsApp"><i class="fa-brands fa-whatsapp text-sm"></i></a>` : ''}
+            </div>
+          </div>
+        `;
+        listContainer.appendChild(card);
+      });
+    }
+
+    function handleDistrictChange() {
+      const selected = document.getElementById('districtSelect').value;
+      const statusMsg = document.getElementById('statusMsg');
+
+      // Matikan mode lokasi GPS jika pengguna memilih kecamatan secara manual
+      if (userMarker) {
+        map.removeLayer(userMarker);
+        userMarker = null;
+        userLocation = null;
+        document.getElementById('gpsBtnText').innerText = "Gunakan Lokasi Saya (GPS)";
+      }
+
+      if (selected && DISTRICT_COORDS[selected]) {
+        const coords = DISTRICT_COORDS[selected];
+        map.flyTo(coords, 13, { duration: 1.2 });
+        statusMsg.innerText = `Menampilkan urutan terdekat dari Kec. ${selected}.`;
+      } else {
+        map.flyTo([-7.323615428, 110.1928201], 13, { duration: 1 });
+        statusMsg.innerText = "Menampilkan seluruh unit Temanggung.";
+      }
+
+      renderMapAndList(selected);
+    }
+
+    function focusOnMap(lat, lng, title) {
+      map.flyTo([lat, lng], 16, { duration: 1 });
+      markersGroup.eachLayer(layer => {
+        if (layer.getLatLng && layer.getLatLng().lat === lat && layer.getLatLng().lng === lng) {
+          layer.openPopup();
+        }
+      });
+    }
+
+    async function fetchDataFromSheets() {
+      const refreshIcon = document.getElementById('refreshIcon');
+      const badgeDot = document.getElementById('sheetStatusDot');
+      const badgeText = document.getElementById('sheetStatusText');
+      const statusMsg = document.getElementById('statusMsg');
+
+      if (refreshIcon) refreshIcon.classList.add('fa-spin');
+
+      try {
+        const response = await fetch(GOOGLE_SHEETS_CSV_URL, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const csvText = await response.text();
+
+        Papa.parse(csvText, {
+          header: true,
+          skipEmptyLines: true,
+          complete: function(results) {
+            if (refreshIcon) refreshIcon.classList.remove('fa-spin');
+            
+            if (results.data && results.data.length > 0) {
+              const validData = results.data.filter(item => {
+                const lat = parseFloat(item.Latitude);
+                const lng = parseFloat(item.Longitude);
+                return item.Nama && !isNaN(lat) && !isNaN(lng);
+              });
+
+              if (validData.length > 0) {
+                ambulanceData = validData;
+                renderMapAndList(document.getElementById('districtSelect').value);
+                
+                if (badgeDot) badgeDot.className = "w-2 h-2 mr-1.5 bg-emerald-500 rounded-full";
+                if (badgeText) badgeText.innerText = "Google Sheets Terhubung";
+                if (statusMsg) statusMsg.innerText = `Berhasil memuat ${validData.length} posko dari Google Sheets.`;
+                return;
+              }
+            }
+            throw new Error("Format CSV kosong.");
+          }
+        });
+
+      } catch (err) {
+        if (refreshIcon) refreshIcon.classList.remove('fa-spin');
+        console.warn("Sheets gagal, menggunakan data lokal:", err);
+        
+        if (badgeDot) badgeDot.className = "w-2 h-2 mr-1.5 bg-amber-500 rounded-full";
+        if (badgeText) badgeText.innerText = "Data Lokal (Cadangan)";
+        if (statusMsg) statusMsg.innerText = "Gagal memuat sheet, memakai data bawaan.";
+        
+        renderMapAndList(document.getElementById('districtSelect').value);
+      }
+    }
+
+    window.onload = function() {
+  initMap();
+};
+  </script>
+</body>
+</html>
